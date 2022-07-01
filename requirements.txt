@@ -1,0 +1,7 @@
+xmltodict
+dnspython
+checkdmarc
+pandas
+matplotlib
+Jinja2
+tabulate
