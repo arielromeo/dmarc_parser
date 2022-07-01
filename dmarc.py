@@ -10,7 +10,7 @@ from tabulate import tabulate
 
 
 class DmarcInfoDetail(object):
-    BASIC_HEADERS: list = ["SourceIP", "Count", "Disposition", "Dkim", "SPF", "HeaderFrom", "SPFDomain", "SPFResult"]
+    BASIC_HEADERS: list = ["SourceIP", "Count", "Disposition", "Dkim", "SPF", "Reason", "HeaderFrom", "SPFDomain", "SPFResult"]
     EXTRA_HEADERS: list = ["DKIMDomain", "DMKIResult", "DKIMSelector"]
     NUMERIC_COLUMNS: list = ["Count"]
 
@@ -21,30 +21,55 @@ class DmarcInfoDetail(object):
         self.policy_evaluated_disposition = row['policy_evaluated']['disposition']
         self.policy_evaluated_dkim = row['policy_evaluated']['dkim']
         self.policy_evaluated_spf = row['policy_evaluated']['spf']
+        self.policy_evaluated_reason = DmarcInfoDetail.__concatenate_reasons(row)
 
         self.identifiers_header_from = record['identifiers']['header_from'] if 'identifiers' in record and 'header_from' in record['identifiers'] \
-            else 'none'
+            else ''
 
         auth_results: dict = record['auth_results']
         self.dkims: list = []
         if 'dkim' in auth_results:
             for dkim in [auth_results['dkim']] if type(auth_results['dkim']) != list else auth_results['dkim']:
                 self.dkims.append({
-                    'domain': dkim['domain'] if 'domain' in dkim else 'none',
-                    'result': dkim['result'] if 'result' in dkim else 'none',
-                    'selector': dkim['selector'] if 'selector' in dkim else 'none'
+                    'domain': dkim['domain'] if 'domain' in dkim else '',
+                    'result': dkim['result'] if 'result' in dkim else '',
+                    'selector': dkim['selector'] if 'selector' in dkim else ''
                 })
+        else:
+            self.dkims.append({
+                'domain': '',
+                'result': '',
+                'selector': ''
+            })
 
-        self.spf_domain = 'none'
-        self.spf_result = 'none'
+        self.spf_domain = ''
+        self.spf_result = ''
         if 'spf' in auth_results:
-            self.spf_domain = auth_results['spf']['domain'] if 'domain' in auth_results['spf'] else 'none'
-            self.spf_result = auth_results['spf']['result'] if 'result' in auth_results['spf'] else 'none'
+            self.spf_domain = auth_results['spf']['domain'] if 'domain' in auth_results['spf'] else ''
+            self.spf_result = auth_results['spf']['result'] if 'result' in auth_results['spf'] else ''
+
+    @staticmethod
+    def __concatenate_reasons(row):
+        reasons: list = []
+        if 'reason' in row['policy_evaluated']:
+            if type(row['policy_evaluated']['reason']) == list:
+                reasons = row['policy_evaluated']['reason']
+            else:
+                reasons = [row['policy_evaluated']['reason']]
+
+        message = ''
+        for reason in reasons:
+            if message != '':
+                message += ' ; '
+
+            message += ','.join([f"{k}={v}" for k, v in reason.items()])
+
+        return message
 
     def plain(self):
         result: list = []
         base: list = [self.source_ip, self.count, self.policy_evaluated_disposition, self.policy_evaluated_dkim,
-                      self.policy_evaluated_spf, self.identifiers_header_from, self.spf_domain, self.spf_result]
+                      self.policy_evaluated_spf, self.policy_evaluated_reason, self.identifiers_header_from, self.spf_domain, self.spf_result]
 
         if len(self.dkims) > 0:
             for dkim in self.dkims:
@@ -106,7 +131,8 @@ class DmarcInfo(object):
 
 
 parser = argparse.ArgumentParser(description='Process DMARC reports')
-parser.add_argument('-s', '--sort-by-column', help=f"Sort by column name, by default '{DmarcInfo.NUMERIC_COLUMNS[0]}'", default=DmarcInfo.NUMERIC_COLUMNS[0], type=str)
+parser.add_argument('-s', '--sort-by-column', help=f"Sort by column name, by default '{DmarcInfo.NUMERIC_COLUMNS[0]}'",
+                    default=DmarcInfo.NUMERIC_COLUMNS[0], type=str)
 parser.add_argument('-r', '--reverse', help="Sort in reverse order", default=False, action='store_true')
 parser.add_argument('file')
 
