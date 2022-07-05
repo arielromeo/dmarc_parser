@@ -89,7 +89,7 @@ class DmarcInfo(object):
     HEADERS: list = ["Organization", "Begin", "End", "Domain", "Adkim", "Aspf", "P", "Sp", "Pct"]
     NUMERIC_COLUMNS: list = ["Pct"] + DmarcInfoDetail.NUMERIC_COLUMNS
 
-    def __init__(self, dmarc: dict):
+    def __init__(self, dmarc: dict, filter_dkim: str = None,  filter_spf: str = None):
         metadata: dict = dmarc['feedback']['report_metadata']
         self.organization = metadata['org_name']
         self.begin_date = datetime.utcfromtimestamp(int(metadata['date_range']['begin'])).strftime(DmarcInfo.DATE_FORMAT)
@@ -110,7 +110,20 @@ class DmarcInfo(object):
             reports = [dmarc['feedback']['record']]
 
         for _report in reports:
-            self.rows.append(DmarcInfoDetail(_report))
+            detail: DmarcInfoDetail = DmarcInfoDetail(_report)
+
+            if filter_dkim is not None and filter_spf is not None \
+                and detail.policy_evaluated_dkim == filter_dkim \
+                and detail.policy_evaluated_spf == filter_spf:
+                    self.rows.append(detail)
+            elif filter_dkim is not None and filter_spf is None \
+                and detail.policy_evaluated_dkim == filter_dkim:
+                    self.rows.append(detail)
+            elif filter_spf is not None and filter_dkim is None \
+                and detail.policy_evaluated_spf == filter_spf:
+                    self.rows.append(detail)
+            elif filter_dkim is None and filter_spf is None:
+                self.rows.append(detail)
 
     def plain(self, sort_by_column: str = NUMERIC_COLUMNS[0], reverse: bool = False):
         result: list = []
@@ -134,6 +147,8 @@ parser = argparse.ArgumentParser(description='Process DMARC reports')
 parser.add_argument('-s', '--sort-by-column', help=f"Sort by column name, by default '{DmarcInfo.NUMERIC_COLUMNS[0]}'",
                     default=DmarcInfo.NUMERIC_COLUMNS[0], type=str)
 parser.add_argument('-r', '--reverse', help="Sort in reverse order", default=False, action='store_true')
+parser.add_argument('-fd', '--filter-dkim', help="Filter DKIM by Pass or others", default=None)
+parser.add_argument('-fs', '--filter-spf', help="Filter SPF by Pass or others", default=None)
 parser.add_argument('file')
 
 args = parser.parse_args()
@@ -152,7 +167,7 @@ else:
     parser.error('Extension not supported')
 
 dmarc = xmltodict.parse(file)
-report: DmarcInfo = DmarcInfo(dmarc)
+report: DmarcInfo = DmarcInfo(dmarc, filter_dkim=args.filter_dkim, filter_spf=args.filter_spf)
 headers = DmarcInfo.get_headers(True)
 
 if args.sort_by_column not in headers:
