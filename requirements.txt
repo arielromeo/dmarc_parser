@@ -5,3 +5,4 @@ pandas
 matplotlib
 Jinja2
 tabulate
+tld

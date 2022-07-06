@@ -3,14 +3,14 @@ import argparse
 import gzip
 import zipfile
 from datetime import datetime
-
 import pandas
 import xmltodict
 from tabulate import tabulate
+from tld import get_tld
 
 
 class DmarcInfoDetail(object):
-    BASIC_HEADERS: list = ["SourceIP", "Count", "Disposition", "Dkim", "SPF", "Reason", "HeaderFrom", "SPFDomain", "SPFResult"]
+    BASIC_HEADERS: list = ["SourceIP", "Count", "Disposition", "Dkim", "SPF", "Reason", "HeaderFrom", "EnvelopeFrom", "SPFDomain", "SPFResult"]
     EXTRA_HEADERS: list = ["DKIMDomain", "DMKIResult", "DKIMSelector"]
     NUMERIC_COLUMNS: list = ["Count"]
 
@@ -24,6 +24,8 @@ class DmarcInfoDetail(object):
         self.policy_evaluated_reason = DmarcInfoDetail.__concatenate_reasons(row)
 
         self.identifiers_header_from = record['identifiers']['header_from'] if 'identifiers' in record and 'header_from' in record['identifiers'] \
+            else ''
+        self.identifiers_envelope_from = record['identifiers']['envelope_from'] if 'identifiers' in record and 'envelope_from' in record['identifiers'] \
             else ''
 
         auth_results: dict = record['auth_results']
@@ -69,11 +71,24 @@ class DmarcInfoDetail(object):
     def plain(self):
         result: list = []
         base: list = [self.source_ip, self.count, self.policy_evaluated_disposition, self.policy_evaluated_dkim,
-                      self.policy_evaluated_spf, self.policy_evaluated_reason, self.identifiers_header_from, self.spf_domain, self.spf_result]
+                      self.policy_evaluated_spf, self.policy_evaluated_reason, self.identifiers_header_from, self.identifiers_envelope_from]
+        spf_results: list = [self.spf_domain, self.spf_result]
 
         if len(self.dkims) > 0:
+            # first level domain
+            spf_fld = get_tld(f"http://{self.spf_domain}", as_object=True)
             for dkim in self.dkims:
-                result.append(base + [dkim['domain'], dkim['result'], dkim['selector']])
+                if dkim['domain'] == "":
+                    result.append(base \
+                                  + spf_results \
+                                  + [dkim['domain'], dkim['result'], dkim['selector']])
+                else:
+                    dkim_fld = get_tld(f"http://{dkim['domain']}", as_object=True)
+                    result.append(base \
+                      + (spf_results if spf_fld.fld == dkim_fld.fld else ["", ""]) \
+                      + [dkim['domain'], dkim['result'], dkim['selector']])
+
+
         else:
             result.append(base)
 
